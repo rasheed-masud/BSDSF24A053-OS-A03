@@ -60,7 +60,7 @@ int main() {
         }
 
         /* Save command in history */
-        add_history(cmdline);
+        save_command_history(cmdline);
 
         /* Tokenize and execute */
         arglist = tokenize(cmdline);

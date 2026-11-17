@@ -7,32 +7,16 @@ static int history_count = 0;
 
 /* Read a command from input */
 char* read_cmd(char* prompt, FILE* fp) {
-    printf("%s", prompt);
-    fflush(stdout);
+    (void)fp;
 
-    char* cmdline = malloc(sizeof(char) * MAX_LEN);
+    char* cmdline = readline(prompt);
 
-    if (cmdline == NULL) {
-        perror("malloc failed");
+    if (cmdline == NULL)
         return NULL;
-    }
 
-    int c, pos = 0;
+    if (cmdline[0] != '\0')
+        save_command_history(cmdline);
 
-    while ((c = getc(fp)) != EOF) {
-        if (c == '\n')
-            break;
-
-        if (pos < MAX_LEN - 1)
-            cmdline[pos++] = c;
-    }
-
-    if (c == EOF && pos == 0) {
-        free(cmdline);
-        return NULL;
-    }
-
-    cmdline[pos] = '\0';
     return cmdline;
 }
 
@@ -110,7 +94,7 @@ char** tokenize(char* cmdline) {
 }
 
 /* Add a command to history */
-void add_history(const char* command) {
+void save_command_history(const char* command) {
 
     if (command == NULL || command[0] == '\0')
         return;
@@ -130,6 +114,7 @@ void add_history(const char* command) {
     command_history[index] = copy;
 
     history_count++;
+    add_history(command);
 }
 
 /* Display command history */

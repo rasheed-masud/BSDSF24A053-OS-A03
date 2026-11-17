@@ -2,6 +2,8 @@
 #ifndef SHELL_H
 #define SHELL_H
 
+#include <readline/readline.h>
+#include <readline/history.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -29,7 +31,7 @@ void display_jobs(void);
 
 #define HISTORY_SIZE 20
 
-void add_history(const char* command);
+void save_command_history(const char* command);
 void print_history(void);
 const char* get_history(int command_number);
 
