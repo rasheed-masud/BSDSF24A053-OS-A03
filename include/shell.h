@@ -27,5 +27,11 @@ int execute_builtin(char** arglist);
 void display_help(void);
 void display_jobs(void);
 
+#define HISTORY_SIZE 20
+
+void add_history(const char* command);
+void print_history(void);
+const char* get_history(int command_number);
+
 #endif
 
