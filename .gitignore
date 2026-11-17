@@ -1,0 +1,6 @@
+# Compiled object files
+obj/*.o
+
+# Keep the executable available for releases
+# bin/psh is intentionally tracked
+
