@@ -50,10 +50,11 @@ char** tokenize(char* cmdline) {
         }
 
         /* Recognize shell operators */
-        if (*cp == '|') {
-            arglist[argnum] = strdup("|");
-            cp++;
-        } else if (*cp == '<') {
+        if (*cp == '|' || *cp == ';' || *cp == '&') {
+    char op[2] = {*cp, '\0'};
+    arglist[argnum] = strdup(op);
+    cp++;
+} else if (*cp == '<') {
             arglist[argnum] = strdup("<");
             cp++;
         } else if (*cp == '>') {

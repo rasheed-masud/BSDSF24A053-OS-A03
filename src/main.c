@@ -1,11 +1,18 @@
+
 #include "shell.h"
 
-int main() {
-
+int main(void) {
     char* cmdline;
     char** arglist;
 
-    while ((cmdline = read_cmd(PROMPT, stdin)) != NULL) {
+    while (1) {
+        /* Reap completed background processes */
+        check_background_jobs();
+
+        cmdline = read_cmd(PROMPT, stdin);
+
+        if (cmdline == NULL)
+            break;
 
         /* Skip empty commands */
         if (cmdline[0] == '\0') {
@@ -13,16 +20,15 @@ int main() {
             continue;
         }
 
-        /* Handle history display */
+        /* Display command history */
         if (strcmp(cmdline, "history") == 0) {
             print_history();
             free(cmdline);
             continue;
         }
 
-        /* Handle !n command execution */
+        /* Handle history command recall: !n */
         if (cmdline[0] == '!') {
-
             char* endptr;
             long number = strtol(cmdline + 1, &endptr, 10);
 
@@ -30,7 +36,6 @@ int main() {
                 *endptr != '\0' ||
                 number < 1 ||
                 number > 2147483647) {
-
                 printf("Invalid history command.\n");
                 free(cmdline);
                 continue;
@@ -66,12 +71,10 @@ int main() {
         arglist = tokenize(cmdline);
 
         if (arglist != NULL) {
-
             execute(arglist);
 
-            for (int i = 0; arglist[i] != NULL; i++) {
+            for (int i = 0; arglist[i] != NULL; i++)
                 free(arglist[i]);
-            }
 
             free(arglist);
         }
@@ -79,7 +82,9 @@ int main() {
         free(cmdline);
     }
 
-    printf("\nShell exited.\n");
+    /* Final background-process check */
+    check_background_jobs();
 
+    printf("\nShell exited.\n");
     return 0;
 }

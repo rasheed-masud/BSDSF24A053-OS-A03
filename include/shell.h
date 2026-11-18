@@ -11,11 +11,22 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #define MAX_LEN 512
 #define MAXARGS 50
 #define ARGLEN 100
 #define PROMPT "FCIT> "
+
+#define HISTORY_SIZE 20
+#define MAX_JOBS 100
+
+typedef struct {
+    pid_t pid;
+    int job_id;
+    char command[MAX_LEN];
+    int active;
+} Job;
 
 char* read_cmd(char* prompt, FILE* fp);
 char** tokenize(char* cmdline);
@@ -26,10 +37,12 @@ int execute_builtin(char** arglist);
 void display_help(void);
 void display_jobs(void);
 
-#define HISTORY_SIZE 20
-
 void save_command_history(const char* command);
 void print_history(void);
 const char* get_history(int command_number);
+
+void add_background_job(pid_t pid, const char* command);
+void check_background_jobs(void);
+void print_background_jobs(void);
 
 #endif
