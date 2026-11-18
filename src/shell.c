@@ -1,4 +1,3 @@
-
 #include "shell.h"
 
 /* Command history storage */
@@ -8,84 +7,103 @@ static int history_count = 0;
 /* Read a command from input */
 char* read_cmd(char* prompt, FILE* fp) {
     (void)fp;
-
-    char* cmdline = readline(prompt);
-
-    if (cmdline == NULL)
-        return NULL;
-
-    if (cmdline[0] != '\0')
-        save_command_history(cmdline);
-
-    return cmdline;
+    return readline(prompt);
 }
 
-/* Tokenize the command line */
-char** tokenize(char* cmdline) {
+/* Free an allocated argument list */
+static void free_arglist(char** arglist) {
+    if (arglist == NULL)
+        return;
 
+    for (int i = 0; arglist[i] != NULL; i++)
+        free(arglist[i]);
+
+    free(arglist);
+}
+
+/* Tokenize commands and recognize shell operators */
+char** tokenize(char* cmdline) {
     if (cmdline == NULL || cmdline[0] == '\0')
         return NULL;
 
-    char** arglist = malloc(sizeof(char*) * (MAXARGS + 1));
+    char** arglist = calloc(MAXARGS + 1, sizeof(char*));
 
     if (arglist == NULL) {
         perror("malloc failed");
         return NULL;
     }
 
-    for (int i = 0; i < MAXARGS + 1; i++) {
-        arglist[i] = calloc(ARGLEN, sizeof(char));
-
-        if (arglist[i] == NULL) {
-            perror("malloc failed");
-
-            for (int j = 0; j < i; j++)
-                free(arglist[j]);
-
-            free(arglist);
-            return NULL;
-        }
-    }
-
-    char* cp = cmdline;
     int argnum = 0;
+    char* cp = cmdline;
 
-    while (*cp != '\0' && argnum < MAXARGS) {
-
+    while (*cp != '\0') {
         while (*cp == ' ' || *cp == '\t')
             cp++;
 
         if (*cp == '\0')
             break;
 
-        char* start = cp;
-        int len = 0;
-
-        while (*cp != '\0' && *cp != ' ' && *cp != '\t') {
-            cp++;
-            len++;
-        }
-
-        if (len >= ARGLEN) {
-            fprintf(stderr, "Argument too long (maximum %d characters).\n",
-                    ARGLEN - 1);
-
-            for (int i = 0; i < MAXARGS + 1; i++)
-                free(arglist[i]);
-
-            free(arglist);
+        if (argnum >= MAXARGS) {
+            fprintf(stderr, "Too many arguments (maximum %d).\n", MAXARGS);
+            free_arglist(arglist);
             return NULL;
         }
 
-        strncpy(arglist[argnum], start, len);
+        /* Recognize shell operators */
+        if (*cp == '|') {
+            arglist[argnum] = strdup("|");
+            cp++;
+        } else if (*cp == '<') {
+            arglist[argnum] = strdup("<");
+            cp++;
+        } else if (*cp == '>') {
+            if (*(cp + 1) == '>') {
+                arglist[argnum] = strdup(">>");
+                cp += 2;
+            } else {
+                arglist[argnum] = strdup(">");
+                cp++;
+            }
+        } else {
+            char* start = cp;
+
+            while (*cp != '\0' &&
+                   *cp != ' ' && *cp != '\t' &&
+                   *cp != '|' && *cp != '<' && *cp != '>')
+                cp++;
+
+            size_t len = (size_t)(cp - start);
+
+            if (len >= ARGLEN) {
+                fprintf(stderr, "Argument too long (maximum %d characters).\n",
+                        ARGLEN - 1);
+                free_arglist(arglist);
+                return NULL;
+            }
+
+            arglist[argnum] = malloc(len + 1);
+
+            if (arglist[argnum] == NULL) {
+                perror("malloc failed");
+                free_arglist(arglist);
+                return NULL;
+            }
+
+            memcpy(arglist[argnum], start, len);
+            arglist[argnum][len] = '\0';
+        }
+
+        if (arglist[argnum] == NULL) {
+            perror("token allocation failed");
+            free_arglist(arglist);
+            return NULL;
+        }
+
         argnum++;
     }
 
     if (argnum == 0) {
-        for (int i = 0; i < MAXARGS + 1; i++)
-            free(arglist[i]);
-
-        free(arglist);
+        free_arglist(arglist);
         return NULL;
     }
 
@@ -95,7 +113,6 @@ char** tokenize(char* cmdline) {
 
 /* Add a command to history */
 void save_command_history(const char* command) {
-
     if (command == NULL || command[0] == '\0')
         return;
 
@@ -119,7 +136,6 @@ void save_command_history(const char* command) {
 
 /* Display command history */
 void print_history(void) {
-
     int start = history_count - HISTORY_SIZE;
 
     if (start < 0)
@@ -132,14 +148,12 @@ void print_history(void) {
 
     for (int i = start; i < history_count; i++) {
         int index = i % HISTORY_SIZE;
-
         printf("%d  %s\n", i + 1, command_history[index]);
     }
 }
 
 /* Retrieve a command from history */
 const char* get_history(int command_number) {
-
     if (command_number < 1 || command_number > history_count)
         return NULL;
 
@@ -148,4 +162,3 @@ const char* get_history(int command_number) {
 
     return command_history[(command_number - 1) % HISTORY_SIZE];
 }
-
