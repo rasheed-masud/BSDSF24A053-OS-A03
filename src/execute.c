@@ -43,9 +43,12 @@ int is_builtin(char* command) {
 }
 
 /* Display help */
+
+/* Display help */
 void display_help(void) {
     printf("\n");
     printf("========== FCIT CUSTOM SHELL ==========\n");
+
     printf("Built-in commands:\n");
     printf("  cd [directory]  Change directory\n");
     printf("  exit            Exit the shell\n");
@@ -56,6 +59,11 @@ void display_help(void) {
     printf("\nVariable assignment:\n");
     printf("  NAME=value      Create or update a variable\n");
     printf("  $NAME           Expand a variable\n");
+
+    printf("\nVariable usage example:\n");
+    printf("  MSG=Hello       Assign a value to MSG\n");
+    printf("  echo $MSG       Display the variable value\n");
+    printf("  set             List all defined variables\n");
 
     printf("\nRedirection:\n");
     printf("  command < file  Input redirection\n");
@@ -79,7 +87,6 @@ void display_help(void) {
 
     printf("=======================================\n\n");
 }
-
 /* Add a background process */
 void add_background_job(pid_t pid, const char* command) {
     for (int i = 0; i < MAX_JOBS; i++) {
