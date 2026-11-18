@@ -38,7 +38,8 @@ int is_builtin(char* command) {
     return strcmp(command, "cd") == 0 ||
            strcmp(command, "exit") == 0 ||
            strcmp(command, "help") == 0 ||
-           strcmp(command, "jobs") == 0;
+           strcmp(command, "jobs") == 0 ||
+           strcmp(command, "set") == 0;
 }
 
 /* Display help */
@@ -50,6 +51,11 @@ void display_help(void) {
     printf("  exit            Exit the shell\n");
     printf("  help            Display help\n");
     printf("  jobs            Display background jobs\n");
+    printf("  set             Display shell variables\n");
+
+    printf("\nVariable assignment:\n");
+    printf("  NAME=value      Create or update a variable\n");
+    printf("  $NAME           Expand a variable\n");
 
     printf("\nRedirection:\n");
     printf("  command < file  Input redirection\n");
@@ -167,8 +173,10 @@ int execute_builtin(char** arglist) {
         return 1;
     }
 
-    if (strcmp(arglist[0], "exit") == 0)
+    if (strcmp(arglist[0], "exit") == 0) {
+        free_variables();
         exit(0);
+    }
 
     if (strcmp(arglist[0], "help") == 0) {
         display_help();
@@ -177,6 +185,11 @@ int execute_builtin(char** arglist) {
 
     if (strcmp(arglist[0], "jobs") == 0) {
         display_jobs();
+        return 1;
+    }
+
+    if (strcmp(arglist[0], "set") == 0) {
+        print_variables();
         return 1;
     }
 
@@ -271,6 +284,22 @@ static int execute_pipeline(char** arglist, int background,
             if (arglist[i] == NULL)
                 break;
         }
+    }
+
+    /* Handle a standalone variable assignment in the parent */
+    if (command_count == 1 &&
+        commands[0].argv[1] == NULL &&
+        commands[0].input_file == NULL &&
+        commands[0].output_file == NULL &&
+        is_variable_assignment(commands[0].argv[0])) {
+
+        if (background) {
+            fprintf(stderr,
+                    "Variable assignments cannot run in the background.\n");
+            return 1;
+        }
+
+        return assign_variable(commands[0].argv[0]);
     }
 
     /* Handle a simple built-in in the parent */
@@ -481,6 +510,7 @@ int execute(char** arglist) {
 
                 segment[count] = NULL;
 
+                /* Preserve the original command text for job reporting */
                 command_text[0] = '\0';
 
                 for (int j = 0; j < count; j++) {
@@ -493,6 +523,17 @@ int execute(char** arglist) {
                             sizeof(command_text) -
                             strlen(command_text) - 1);
                 }
+
+                /* Expand variables for this command segment */
+                expand_variables(segment);
+
+                /*
+                 * Expansion replaces allocated argument strings.
+                 * Copy updated pointers back to the original list
+                 * so main.c can safely free them.
+                 */
+                for (int j = 0; j < count; j++)
+                    arglist[start + j] = segment[j];
 
                 last_command_status =
                     execute_pipeline(segment, background, command_text);
