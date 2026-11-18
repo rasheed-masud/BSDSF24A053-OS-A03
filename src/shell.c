@@ -1,16 +1,17 @@
+
 #include "shell.h"
 
 /* Command history storage */
 static char* command_history[HISTORY_SIZE] = {NULL};
 static int history_count = 0;
 
-/* Read a command from input */
+/* Read a command */
 char* read_cmd(char* prompt, FILE* fp) {
     (void)fp;
     return readline(prompt);
 }
 
-/* Free an allocated argument list */
+/* Free an argument list */
 static void free_arglist(char** arglist) {
     if (arglist == NULL)
         return;
@@ -21,7 +22,13 @@ static void free_arglist(char** arglist) {
     free(arglist);
 }
 
-/* Tokenize commands and recognize shell operators */
+/* Check shell operators */
+static int is_shell_operator(char c) {
+    return c == '|' || c == '<' || c == '>' ||
+           c == ';' || c == '&';
+}
+
+/* Tokenize commands, supporting quotes and shell operators */
 char** tokenize(char* cmdline) {
     if (cmdline == NULL || cmdline[0] == '\0')
         return NULL;
@@ -44,54 +51,65 @@ char** tokenize(char* cmdline) {
             break;
 
         if (argnum >= MAXARGS) {
-            fprintf(stderr, "Too many arguments (maximum %d).\n", MAXARGS);
+            fprintf(stderr, "Too many arguments (maximum %d).\n",
+                    MAXARGS);
             free_arglist(arglist);
             return NULL;
         }
 
-        /* Recognize shell operators */
-        if (*cp == '|' || *cp == ';' || *cp == '&') {
-    char op[2] = {*cp, '\0'};
-    arglist[argnum] = strdup(op);
-    cp++;
-} else if (*cp == '<') {
-            arglist[argnum] = strdup("<");
-            cp++;
-        } else if (*cp == '>') {
-            if (*(cp + 1) == '>') {
-                arglist[argnum] = strdup(">>");
+        /* Recognize operators outside quoted strings */
+        if (is_shell_operator(*cp)) {
+            char op[3] = {*cp, '\0', '\0'};
+
+            if (*cp == '>' && *(cp + 1) == '>') {
+                op[1] = '>';
                 cp += 2;
             } else {
-                arglist[argnum] = strdup(">");
                 cp++;
             }
+
+            arglist[argnum] = strdup(op);
         } else {
-            char* start = cp;
+            char token[ARGLEN];
+            int length = 0;
+            char quote = '\0';
 
-            while (*cp != '\0' &&
-                   *cp != ' ' && *cp != '\t' &&
-                   *cp != '|' && *cp != '<' && *cp != '>')
-                cp++;
+            while (*cp != '\0') {
+                if (quote == '\0' &&
+                    (*cp == ' ' || *cp == '\t' ||
+                     is_shell_operator(*cp)))
+                    break;
 
-            size_t len = (size_t)(cp - start);
+                if ((*cp == '"' || *cp == '\'') &&
+                    (quote == '\0' || quote == *cp)) {
+                    if (quote == '\0')
+                        quote = *cp;
+                    else
+                        quote = '\0';
 
-            if (len >= ARGLEN) {
-                fprintf(stderr, "Argument too long (maximum %d characters).\n",
-                        ARGLEN - 1);
+                    cp++;
+                    continue;
+                }
+
+                if (length >= ARGLEN - 1) {
+                    fprintf(stderr,
+                            "Argument too long (maximum %d characters).\n",
+                            ARGLEN - 1);
+                    free_arglist(arglist);
+                    return NULL;
+                }
+
+                token[length++] = *cp++;
+            }
+
+            if (quote != '\0') {
+                fprintf(stderr, "Syntax error: unmatched quotation mark\n");
                 free_arglist(arglist);
                 return NULL;
             }
 
-            arglist[argnum] = malloc(len + 1);
-
-            if (arglist[argnum] == NULL) {
-                perror("malloc failed");
-                free_arglist(arglist);
-                return NULL;
-            }
-
-            memcpy(arglist[argnum], start, len);
-            arglist[argnum][len] = '\0';
+            token[length] = '\0';
+            arglist[argnum] = strdup(token);
         }
 
         if (arglist[argnum] == NULL) {
@@ -112,7 +130,7 @@ char** tokenize(char* cmdline) {
     return arglist;
 }
 
-/* Add a command to history */
+/* Save a command in the history */
 void save_command_history(const char* command) {
     if (command == NULL || command[0] == '\0')
         return;

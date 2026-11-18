@@ -1,3 +1,4 @@
+
 #ifndef SHELL_H
 #define SHELL_H
 
@@ -30,7 +31,11 @@ typedef struct {
 
 char* read_cmd(char* prompt, FILE* fp);
 char** tokenize(char* cmdline);
+
 int execute(char** arglist);
+
+/* Execute a command and return its actual exit status */
+int execute_status(char** arglist);
 
 int is_builtin(char* command);
 int execute_builtin(char** arglist);

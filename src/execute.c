@@ -19,8 +19,9 @@ typedef struct {
 
 static BackgroundJob job_table[MAX_JOBS];
 static int next_job_id = 1;
+static int last_command_status = 0;
 
-/* Check whether a token is a shell operator */
+/* Check shell operators */
 static int is_operator(const char* token) {
     return token != NULL &&
            (strcmp(token, "|") == 0 ||
@@ -29,7 +30,7 @@ static int is_operator(const char* token) {
             strcmp(token, ">>") == 0);
 }
 
-/* Check whether a command is a built-in */
+/* Check built-in commands */
 int is_builtin(char* command) {
     if (command == NULL)
         return 0;
@@ -40,7 +41,7 @@ int is_builtin(char* command) {
            strcmp(command, "jobs") == 0;
 }
 
-/* Display help information */
+/* Display help */
 void display_help(void) {
     printf("\n");
     printf("========== FCIT CUSTOM SHELL ==========\n");
@@ -49,19 +50,31 @@ void display_help(void) {
     printf("  exit            Exit the shell\n");
     printf("  help            Display help\n");
     printf("  jobs            Display background jobs\n");
+
     printf("\nRedirection:\n");
     printf("  command < file  Input redirection\n");
     printf("  command > file  Output redirection\n");
     printf("  command >> file Append output\n");
+
     printf("\nPipelines:\n");
     printf("  command1 | command2\n");
+
     printf("\nMultitasking:\n");
-    printf("  command1 ; command2  Command chaining\n");
-    printf("  command &            Background execution\n");
+    printf("  command1 ; command2\n");
+    printf("  command &\n");
+
+    printf("\nConditional execution:\n");
+    printf("  if condition\n");
+    printf("  then\n");
+    printf("      commands\n");
+    printf("  else\n");
+    printf("      commands\n");
+    printf("  fi\n");
+
     printf("=======================================\n\n");
 }
 
-/* Register a background process */
+/* Add a background process */
 void add_background_job(pid_t pid, const char* command) {
     for (int i = 0; i < MAX_JOBS; i++) {
         if (!job_table[i].active) {
@@ -75,9 +88,7 @@ void add_background_job(pid_t pid, const char* command) {
                      command != NULL ? command : "background process");
 
             printf("[%d] %d\n",
-                   job_table[i].job_id,
-                   (int)pid);
-
+                   job_table[i].job_id, (int)pid);
             return;
         }
     }
@@ -86,7 +97,7 @@ void add_background_job(pid_t pid, const char* command) {
             (int)pid);
 }
 
-/* Check background processes without blocking */
+/* Check background jobs without blocking */
 void check_background_jobs(void) {
     for (int i = 0; i < MAX_JOBS; i++) {
         if (!job_table[i].active)
@@ -109,7 +120,7 @@ void check_background_jobs(void) {
     }
 }
 
-/* Print active background jobs */
+/* Display background jobs */
 void print_background_jobs(void) {
     check_background_jobs();
 
@@ -128,7 +139,6 @@ void print_background_jobs(void) {
         printf("No background jobs are currently running.\n");
 }
 
-/* Built-in jobs command */
 void display_jobs(void) {
     print_background_jobs();
 }
@@ -149,8 +159,10 @@ int execute_builtin(char** arglist) {
             directory = arglist[1];
         }
 
-        if (chdir(directory) != 0)
+        if (chdir(directory) != 0) {
             perror("cd");
+            return 1;
+        }
 
         return 1;
     }
@@ -171,7 +183,7 @@ int execute_builtin(char** arglist) {
     return 0;
 }
 
-/* Parse one command between pipeline separators */
+/* Parse one command in a pipeline */
 static int parse_command(char** arglist, int start, int end,
                          Command* command) {
     int argc = 0;
@@ -186,8 +198,7 @@ static int parse_command(char** arglist, int start, int end,
 
             if (i + 1 >= end || is_operator(arglist[i + 1])) {
                 fprintf(stderr,
-                        "Syntax error: missing filename after %s\n",
-                        op);
+                        "Syntax error: missing filename after %s\n", op);
                 return -1;
             }
 
@@ -227,7 +238,7 @@ static int parse_command(char** arglist, int start, int end,
     return 0;
 }
 
-/* Execute one pipeline, either in foreground or background */
+/* Execute a pipeline and preserve its exit status */
 static int execute_pipeline(char** arglist, int background,
                             const char* command_text) {
     if (arglist == NULL || arglist[0] == NULL)
@@ -240,19 +251,19 @@ static int execute_pipeline(char** arglist, int background,
     int command_count = 0;
     int start = 0;
 
-    /* Split commands using pipeline separators */
+    /* Split pipeline commands */
     for (int i = 0; ; i++) {
         if (arglist[i] == NULL ||
             strcmp(arglist[i], "|") == 0) {
 
             if (command_count >= MAX_PIPE_COMMANDS) {
                 fprintf(stderr, "Too many pipeline commands\n");
-                return -1;
+                return 1;
             }
 
             if (parse_command(arglist, start, i,
                               &commands[command_count]) != 0)
-                return -1;
+                return 1;
 
             command_count++;
             start = i + 1;
@@ -262,7 +273,7 @@ static int execute_pipeline(char** arglist, int background,
         }
     }
 
-    /* Run simple built-ins in the parent process */
+    /* Handle a simple built-in in the parent */
     if (command_count == 1 &&
         is_builtin(commands[0].argv[0]) &&
         commands[0].input_file == NULL &&
@@ -270,16 +281,15 @@ static int execute_pipeline(char** arglist, int background,
 
         if (background) {
             fprintf(stderr,
-                    "Background execution of built-in commands "
-                    "is not supported.\n");
-            return -1;
+                    "Background execution of built-ins is not supported.\n");
+            return 1;
         }
 
         execute_builtin(commands[0].argv);
         return 0;
     }
 
-    /* Create required pipes */
+    /* Create pipes */
     for (int i = 0; i < command_count - 1; i++) {
         if (pipe(pipes[i]) == -1) {
             perror("pipe failed");
@@ -289,13 +299,13 @@ static int execute_pipeline(char** arglist, int background,
                 close(pipes[j][1]);
             }
 
-            return -1;
+            return 1;
         }
     }
 
     int launched = 0;
 
-    /* Fork a process for each pipeline command */
+    /* Fork child processes */
     for (int i = 0; i < command_count; i++) {
         pids[i] = fork();
 
@@ -305,7 +315,7 @@ static int execute_pipeline(char** arglist, int background,
         }
 
         if (pids[i] == 0) {
-            /* Connect input from previous pipe */
+            /* Connect input pipe */
             if (i > 0) {
                 if (dup2(pipes[i - 1][0], STDIN_FILENO) == -1) {
                     perror("dup2 input pipe");
@@ -313,7 +323,7 @@ static int execute_pipeline(char** arglist, int background,
                 }
             }
 
-            /* Connect output to next pipe */
+            /* Connect output pipe */
             if (i < command_count - 1) {
                 if (dup2(pipes[i][1], STDOUT_FILENO) == -1) {
                     perror("dup2 output pipe");
@@ -379,38 +389,61 @@ static int execute_pipeline(char** arglist, int background,
             execvp(commands[i].argv[0], commands[i].argv);
 
             perror(commands[i].argv[0]);
-            _exit(EXIT_FAILURE);
+            _exit(127);
         }
 
         launched++;
     }
 
-    /* Close pipe descriptors in parent */
+    /* Close pipes in parent */
     for (int i = 0; i < command_count - 1; i++) {
         close(pipes[i][0]);
         close(pipes[i][1]);
     }
 
-    /* Background execution: register every child */
+    /* Background execution */
     if (background) {
         for (int i = 0; i < launched; i++)
             add_background_job(pids[i], command_text);
 
-        return launched == command_count ? 0 : -1;
+        return launched == command_count ? 0 : 1;
     }
 
-    /* Foreground execution: wait for all children */
+    /* Foreground execution and status collection */
+    int result_status = 0;
+
     for (int i = 0; i < launched; i++) {
         int status;
+        pid_t result;
 
-        if (waitpid(pids[i], &status, 0) == -1)
+        do {
+            result = waitpid(pids[i], &status, 0);
+        } while (result == -1 && errno == EINTR);
+
+        if (result == -1) {
             perror("waitpid failed");
+            result_status = 1;
+            continue;
+        }
+
+        /* Use the exit status of the final pipeline command */
+        if (i == launched - 1) {
+            if (WIFEXITED(status))
+                result_status = WEXITSTATUS(status);
+            else if (WIFSIGNALED(status))
+                result_status = 128 + WTERMSIG(status);
+            else
+                result_status = 1;
+        }
     }
 
-    return launched == command_count ? 0 : -1;
+    if (launched != command_count)
+        return 1;
+
+    return result_status;
 }
 
-/* Execute commands, supporting ; and & separators */
+/* Execute commands separated by ; and & */
 int execute(char** arglist) {
     if (arglist == NULL || arglist[0] == NULL)
         return 0;
@@ -431,7 +464,6 @@ int execute(char** arglist) {
                 strcmp(arglist[i], "&") == 0)
                 background = 1;
 
-            /* Ignore empty segments */
             if (end > start) {
                 char* segment[MAXARGS + 1];
                 char command_text[MAX_LEN];
@@ -440,7 +472,8 @@ int execute(char** arglist) {
 
                 if (count > MAXARGS) {
                     fprintf(stderr, "Too many command arguments\n");
-                    return -1;
+                    last_command_status = 1;
+                    return 1;
                 }
 
                 for (int j = 0; j < count; j++)
@@ -448,7 +481,6 @@ int execute(char** arglist) {
 
                 segment[count] = NULL;
 
-                /* Build a readable command string for jobs */
                 command_text[0] = '\0';
 
                 for (int j = 0; j < count; j++) {
@@ -462,9 +494,8 @@ int execute(char** arglist) {
                             strlen(command_text) - 1);
                 }
 
-                if (execute_pipeline(segment, background,
-                                     command_text) != 0)
-                    return -1;
+                last_command_status =
+                    execute_pipeline(segment, background, command_text);
             }
 
             if (arglist[i] == NULL)
@@ -474,5 +505,11 @@ int execute(char** arglist) {
         }
     }
 
-    return 0;
+    return last_command_status;
+}
+
+/* Execute a condition and return its exit status */
+int execute_status(char** arglist) {
+    execute(arglist);
+    return last_command_status;
 }
