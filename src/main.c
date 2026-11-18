@@ -1,5 +1,4 @@
 
-
 #include "shell.h"
 
 #define MAX_BLOCK_LINES 100
@@ -251,6 +250,9 @@ int main(void) {
     }
 
     check_background_jobs();
+
+    /* Release all dynamically allocated shell variables */
+    free_variables();
 
     printf("\nShell exited.\n");
     return 0;

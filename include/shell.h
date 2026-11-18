@@ -29,6 +29,13 @@ typedef struct {
     int active;
 } Job;
 
+/* Shell variable linked list */
+typedef struct ShellVariable {
+    char* name;
+    char* value;
+    struct ShellVariable* next;
+} ShellVariable;
+
 char* read_cmd(char* prompt, FILE* fp);
 char** tokenize(char* cmdline);
 
@@ -41,6 +48,13 @@ int is_builtin(char* command);
 int execute_builtin(char** arglist);
 void display_help(void);
 void display_jobs(void);
+
+/* Shell variable management */
+int is_variable_assignment(const char* token);
+int assign_variable(const char* assignment);
+void expand_variables(char** arglist);
+void print_variables(void);
+void free_variables(void);
 
 void save_command_history(const char* command);
 void print_history(void);
